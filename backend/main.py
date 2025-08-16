@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import requests
 import logging
+from supabase import create_client
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI()
 
@@ -23,18 +28,26 @@ app.add_middleware(
 # CrowdSec LAPI configuration
 CROWDSEC_API_URL = os.getenv("CROWDSEC_API_URL", "http://localhost:8080")
 CROWDSEC_LOGIN = os.getenv("CROWDSEC_LOGIN", "backend")
-CROWDSEC_PASSWORD = os.getenv(
-    "CROWDSEC_PASSWORD",
-    "d2QMXGwT2DnI8zrTuhssoPEEOj7uvWUcN0WVkOiCTaepWRx81I6FNmy72wckDWi2"
-)
+CROWDSEC_PASSWORD = os.getenv("CROWDSEC_PASSWORD", "your_machine_password_here")
+
+# Supabase config (READ FROM .env)
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logging.error("❌ Missing Supabase configuration. Check your .env file.")
+    raise Exception("Supabase URL or Key not set")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 
 def get_jwt_token():
+    """Login to CrowdSec LAPI and return a JWT token"""
     try:
-        # Use /v1/watchers/login for machine authentication
         login_resp = requests.post(
             f"{CROWDSEC_API_URL}/v1/watchers/login",
             json={"machine_id": CROWDSEC_LOGIN, "password": CROWDSEC_PASSWORD},
-            timeout=5
+            timeout=5,
         )
         login_resp.raise_for_status()
         token = login_resp.json().get("token")
@@ -45,14 +58,37 @@ def get_jwt_token():
         logging.error(f"Login failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to login to CrowdSec API")
 
-@app.get("/alerts")
-def get_alerts():
+
+@app.get("/alerts/crowdsec")
+def get_alerts_from_crowdsec():
+    """Fetch alerts from CrowdSec directly"""
     try:
         token = get_jwt_token()
         headers = {"Authorization": f"Bearer {token}"}
         resp = requests.get(f"{CROWDSEC_API_URL}/v1/alerts", headers=headers, timeout=5)
         resp.raise_for_status()
-        return resp.json()
+        alerts = resp.json()
+
+        # Save alerts into Supabase
+        for alert in alerts:
+            data = {
+                "source_ip": alert.get("source", {}).get("ip", "unknown"),
+                "event": alert.get("scenario", "unknown"),
+            }
+            supabase.table("alerts").insert(data).execute()
+
+        return alerts
     except requests.exceptions.RequestException as e:
         logging.error(f"Error fetching alerts: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch alerts")
+
+
+@app.get("/alerts")
+def get_alerts_from_supabase():
+    """Fetch stored alerts from Supabase"""
+    try:
+        response = supabase.table("alerts").select("*").order("timestamp", desc=True).execute()
+        return response.data
+    except Exception as e:
+        logging.error(f"Error fetching from Supabase: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch from Supabase")
