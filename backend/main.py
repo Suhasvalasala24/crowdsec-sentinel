@@ -6,6 +6,7 @@ import logging
 
 app = FastAPI()
 
+# Allow frontend origins
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -19,20 +20,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# CrowdSec LAPI configuration
 CROWDSEC_API_URL = os.getenv("CROWDSEC_API_URL", "http://localhost:8080")
 CROWDSEC_LOGIN = os.getenv("CROWDSEC_LOGIN", "backend")
-CROWDSEC_PASSWORD = os.getenv("CROWDSEC_PASSWORD", "tUx6kDSVgYAKi5SyjJ193Jpiyj9BwMkAsQ4nJOjv1ideN6h9l1ecQfi1IEeQnRLN")
+CROWDSEC_PASSWORD = os.getenv(
+    "CROWDSEC_PASSWORD",
+    "d2QMXGwT2DnI8zrTuhssoPEEOj7uvWUcN0WVkOiCTaepWRx81I6FNmy72wckDWi2"
+)
 
 def get_jwt_token():
     try:
+        # Use /v1/watchers/login for machine authentication
         login_resp = requests.post(
-            f"{CROWDSEC_API_URL}/v1/login",
+            f"{CROWDSEC_API_URL}/v1/watchers/login",
             json={"machine_id": CROWDSEC_LOGIN, "password": CROWDSEC_PASSWORD},
+            timeout=5
         )
         login_resp.raise_for_status()
         token = login_resp.json().get("token")
         if not token:
-            raise Exception("No token received from login")
+            raise Exception("No token received from CrowdSec API")
         return token
     except Exception as e:
         logging.error(f"Login failed: {e}")
@@ -43,7 +50,7 @@ def get_alerts():
     try:
         token = get_jwt_token()
         headers = {"Authorization": f"Bearer {token}"}
-        resp = requests.get(f"{CROWDSEC_API_URL}/v1/alerts", headers=headers)
+        resp = requests.get(f"{CROWDSEC_API_URL}/v1/alerts", headers=headers, timeout=5)
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.RequestException as e:

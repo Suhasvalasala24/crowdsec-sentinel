@@ -1,36 +1,38 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter, HTTPException
 import os
 import requests
 import logging
-from requests.auth import HTTPBasicAuth
 
-app = FastAPI()
+router = APIRouter()
 
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Use environment variables or hardcode your login and password here
+# Config
+LAPI_URL = "http://localhost:8080"
 CROWDSEC_LOGIN = os.getenv("CROWDSEC_LOGIN", "backend")
 CROWDSEC_PASSWORD = os.getenv("CROWDSEC_PASSWORD", "tUx6kDSVgYAKi5SyjJ193Jpiyj9BwMkAsQ4nJOjv1ideN6h9l1ecQfi1IEeQnRLN")
 
-@app.get("/alerts")
-def get_alerts():
+
+def get_lapi_session():
+    """Authenticate to CrowdSec LAPI and return a requests.Session with JWT cookie."""
+    session = requests.Session()
+    login_payload = {
+        "login": CROWDSEC_LOGIN,
+        "password": CROWDSEC_PASSWORD
+    }
     try:
-        resp = requests.get(
-            "http://localhost:8080/v1/alerts",
-            auth=HTTPBasicAuth(CROWDSEC_LOGIN, CROWDSEC_PASSWORD)
-        )
+        resp = session.post(f"{LAPI_URL}/v1/login", json=login_payload)
+        resp.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logging.error(f"LAPI login failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to login to CrowdSec LAPI")
+    return session
+
+
+@router.get("/alerts")
+def get_alerts():
+    """Fetch alerts from CrowdSec LAPI."""
+    session = get_lapi_session()
+    try:
+        resp = session.get(f"{LAPI_URL}/v1/alerts")
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.RequestException as e:
