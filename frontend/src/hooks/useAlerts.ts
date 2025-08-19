@@ -24,15 +24,34 @@ export const useAlerts = () => {
 
   const fetchAlerts = async () => {
     try {
-      // Mock data for now until Supabase types are properly set up
-      const mockAlerts = [
-        { id: 1, event: 'SSH Bruteforce', source_ip: '205.0.113.1', timestamp: new Date().toISOString() },
-        { id: 2, event: 'Web Scan', source_ip: '192.0.2.45', timestamp: new Date().toISOString() },
-        { id: 3, event: 'DDoS Attempt', source_ip: '188.51.100.23', timestamp: new Date().toISOString() },
-        { id: 4, event: 'Port Scan', source_ip: '202.0.113.55', timestamp: new Date().toISOString() }
-      ];
-      
-      const transformedAlerts = mockAlerts.map(alert => ({
+      // First try to fetch from your FastAPI backend
+      const response = await fetch('http://localhost:8000/alerts');
+      if (response.ok) {
+        const backendAlerts = await response.json();
+        const transformedAlerts = backendAlerts.map((alert: any) => ({
+          id: alert.id?.toString() || Math.random().toString(),
+          event: alert.event || 'Unknown Event',
+          source_ip: alert.source_ip || 'Unknown IP',
+          timestamp: new Date(alert.timestamp).toLocaleString(),
+          severity: getSeverityFromEvent(alert.event || 'Unknown Event')
+        }));
+        setAlerts(transformedAlerts);
+        return;
+      }
+    } catch (error) {
+      console.error('Error fetching from backend:', error);
+    }
+
+    try {
+      // Fallback to Supabase direct query
+      const { data, error } = await supabase
+        .from('alerts')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (error) throw error;
+
+      const transformedAlerts = (data || []).map(alert => ({
         id: alert.id.toString(),
         event: alert.event,
         source_ip: alert.source_ip,
@@ -42,7 +61,12 @@ export const useAlerts = () => {
 
       setAlerts(transformedAlerts);
     } catch (error) {
-      console.error('Error fetching alerts:', error);
+      console.error('Error fetching alerts from Supabase:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch alerts",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -60,7 +84,7 @@ export const useAlerts = () => {
   useEffect(() => {
     fetchAlerts();
 
-    // Set up real-time subscription
+    // Set up real-time subscription for new alerts
     const channel = supabase
       .channel('alerts-changes')
       .on(
@@ -78,13 +102,21 @@ export const useAlerts = () => {
             timestamp: new Date(payload.new.timestamp).toLocaleString(),
             severity: getSeverityFromEvent(payload.new.event)
           };
-          setAlerts(prev => [newAlert, ...prev.slice(0, 49)]);
+          setAlerts(prev => [newAlert, ...prev.slice(0, 99)]); // Keep last 100 alerts
+          toast({
+            title: "New Alert",
+            description: `${newAlert.event} from ${newAlert.source_ip}`,
+          });
         }
       )
       .subscribe();
 
+    // Also set up periodic refresh to catch any missed alerts
+    const refreshInterval = setInterval(fetchAlerts, 30000); // Refresh every 30 seconds
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(refreshInterval);
     };
   }, []);
 
