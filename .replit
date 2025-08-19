@@ -1,0 +1,16 @@
+modules = ["python-3.12", "nodejs-20", "c-clang14"]
+run = "npm run dev"
+
+[nix]
+channel = "stable-25_05"
+
+[deployment]
+run = ["sh", "-c", "npm run dev"]
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
+
+[[ports]]
+localPort = 8080
+externalPort = 80
