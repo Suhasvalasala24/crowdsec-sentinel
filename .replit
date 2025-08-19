@@ -28,7 +28,7 @@ localPort = 8082
 externalPort = 3000
 
 [workflows]
-runButton = "Start Clean"
+runButton = "Start Clean App"
 
 [[workflows.workflow]]
 name = "Start Backend"
@@ -76,6 +76,19 @@ args = "cd frontend && npm run dev"
 
 [[workflows.workflow]]
 name = "Start Clean"
+author = 46633659
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python main.py"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm run dev"
+
+[[workflows.workflow]]
+name = "Start Clean App"
 author = 46633659
 mode = "parallel"
 
