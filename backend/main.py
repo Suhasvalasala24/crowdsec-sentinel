@@ -15,7 +15,12 @@ app = FastAPI()
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://your-frontend-url.repl.co",  # ✅ Add your deployed frontend URL here
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
+    "https://50180dd1-6bc9-48b4-afe1-083b2f3b9f96-00-qtmgnn85pjg4.pike.replit.dev",
+    "*"  # Allow all origins for development
 ]
 
 app.add_middleware(
@@ -110,3 +115,6 @@ def get_alerts_from_supabase():
         logging.error(f"❌ Error fetching from Supabase: {e}")
         raise HTTPException(status_code=500,
                             detail="Failed to fetch from Supabase")
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
