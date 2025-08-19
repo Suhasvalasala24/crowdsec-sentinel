@@ -1,6 +1,6 @@
 import { Shield, User } from "lucide-react";
 import AlertFeed from "@/components/AlertFeed";
-import SimpleThreatMap from "@/components/SimpleThreatMap";
+import ThreatMapLeaflet from "@/components/ThreatMapLeaflet";
 import CommunityRules from "@/components/CommunityRules";
 
 const Index = () => {
@@ -35,7 +35,7 @@ const Index = () => {
           
           {/* Right Column - Threat Map and Community Rules */}
           <div className="lg:col-span-2 space-y-6">
-            <SimpleThreatMap />
+            <ThreatMapLeaflet />
             <CommunityRules />
           </div>
         </div>

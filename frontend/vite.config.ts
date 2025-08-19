@@ -13,6 +13,13 @@ export default defineConfig(({ mode }) => ({
       "127.0.0.1",
       "50180dd1-6bc9-48b4-afe1-083b2f3b9f96-00-qtmgnn85pjg4.pike.replit.dev", // Replit domain
     ],
+    proxy: {
+      '/api': {
+        target: 'http://0.0.0.0:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      }
+    }
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(
     Boolean,

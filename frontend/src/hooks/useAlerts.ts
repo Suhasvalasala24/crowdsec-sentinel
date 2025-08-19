@@ -25,7 +25,7 @@ export const useAlerts = () => {
   const fetchAlerts = async () => {
     try {
       // First try to fetch from your FastAPI backend
-      const response = await fetch('http://0.0.0.0:8000/alerts');
+      const response = await fetch('/api/alerts');
       if (response.ok) {
         const backendAlerts = await response.json();
         const transformedAlerts = backendAlerts.map((alert: any) => ({
