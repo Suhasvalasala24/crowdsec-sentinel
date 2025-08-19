@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Filter, AlertTriangle, Shield, Zap, Scan, Calendar } from "lucide-react";
-import { useAlerts, Alert } from "@/hooks/useAlerts";
+import { useAlerts } from "@/hooks/useAlerts";
 
 const AlertFeed = () => {
   const { alerts, loading } = useAlerts();
@@ -18,20 +18,6 @@ const AlertFeed = () => {
     if (eventLower.includes('ddos') || eventLower.includes('dos')) return Zap;
     return AlertTriangle;
   };
-
-  const getDetailsFromEvent = (event: string): string => {
-    const eventLower = event.toLowerCase();
-    if (eventLower.includes('ssh')) return 'authentication_fail';
-    if (eventLower.includes('scan')) return 'port_scan';
-    if (eventLower.includes('ddos')) return 'distributed_dos';
-    if (eventLower.includes('web')) return 'path_traversal';
-    return 'suspicious_activity';
-  };
-
-  const filteredAlerts = alerts.filter(alert => {
-    if (severityFilter === "all") return true;
-    return alert.severity?.toLowerCase() === severityFilter.toLowerCase();
-  });
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -54,9 +40,9 @@ const AlertFeed = () => {
     const color = getSeverityColor(severity);
     return (
       <Badge 
-        variant="outline" 
+        variant="outline"
         className="text-xs font-medium border-0 px-2 py-1 rounded-md"
-        style={{ 
+        style={{
           backgroundColor: `${color}20`,
           color: color,
           border: `1px solid ${color}40`
@@ -66,6 +52,10 @@ const AlertFeed = () => {
       </Badge>
     );
   };
+
+  const filteredAlerts = alerts
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .filter(alert => severityFilter === "all" || alert.severity?.toLowerCase() === severityFilter.toLowerCase());
 
   if (loading) {
     return (
@@ -86,8 +76,8 @@ const AlertFeed = () => {
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-semibold text-foreground">Alert Feed</CardTitle>
           <Button 
-            variant="outline" 
-            size="sm" 
+            variant="outline"
+            size="sm"
             className="text-muted-foreground"
             onClick={() => setShowFilters(!showFilters)}
           >
@@ -95,7 +85,6 @@ const AlertFeed = () => {
             Filter
           </Button>
         </div>
-        
         {showFilters && (
           <div className="mt-4 space-y-2">
             <div className="flex items-center space-x-2">
@@ -117,44 +106,38 @@ const AlertFeed = () => {
           </div>
         )}
       </CardHeader>
-      <CardContent className="space-y-3">
+
+      <CardContent className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
         {filteredAlerts.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
             No alerts found
           </div>
         ) : (
-          filteredAlerts.map((alert) => {
+          filteredAlerts.map(alert => {
             const IconComponent = getIconForEvent(alert.event);
             const severityColor = getSeverityColor(alert.severity || 'Low');
-            
+
             return (
               <div 
-                key={alert.id}
+                key={alert.id} 
                 className="flex items-start space-x-3 p-3 rounded-lg bg-secondary/30 border border-border/50 hover:bg-secondary/50 transition-colors"
               >
                 <div 
                   className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: `${severityColor}20` }}
                 >
-                  <span 
-                    className="text-sm font-bold"
-                    style={{ color: severityColor }}
-                  >
+                  <span style={{ color: severityColor }} className="text-sm font-bold">
                     {(alert.severity || 'L').charAt(0)}
                   </span>
                 </div>
-                
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <h4 className="text-sm font-medium text-foreground">{alert.event}</h4>
                     {getSeverityBadge(alert.severity || 'Low')}
                   </div>
                   <p className="text-sm text-muted-foreground">{alert.source_ip}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{getDetailsFromEvent(alert.event)}</p>
-                </div>
-                
-                <div className="text-xs text-muted-foreground text-right">
-                  {alert.timestamp}
+                  <p className="text-xs text-muted-foreground mt-1">{alert.timestamp}</p>
                 </div>
               </div>
             );
