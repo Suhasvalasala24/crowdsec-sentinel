@@ -10,38 +10,12 @@ export interface Alert {
   severity?: string;
 }
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/components/ui/use-toast';
-
-interface Alert {
-  id: string;
-  event: string;
-  source_ip: string;
-  timestamp: string;
-  severity: 'low' | 'medium' | 'high';
-  location?: {
-    lat: number;
-    lng: number;
-    country: string;
-  };
-}
-
 interface SupabaseAlert {
   id: number;
   event: string;
   source_ip: string;
   timestamp: string;
 }
-
-const getSeverityFromEvent = (event: string): 'low' | 'medium' | 'high' => {
-  const lowEvents = ['ssh-slow-bruteforce', 'http-crawl-non_statics'];
-  const highEvents = ['ssh-bruteforce', 'http-bad-user-agent', 'http-crawl', 'ddos'];
-  
-  if (highEvents.some(e => event.toLowerCase().includes(e))) return 'high';
-  if (lowEvents.some(e => event.toLowerCase().includes(e))) return 'medium';
-  return 'low';
-};
 
 export const useAlerts = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
