@@ -14,3 +14,24 @@ externalPort = 8000
 [[ports]]
 localPort = 8080
 externalPort = 80
+
+[workflows]
+runButton = "Start Frontend"
+
+[[workflows.workflow]]
+name = "Start Backend"
+author = 46633659
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python main.py"
+
+[[workflows.workflow]]
+name = "Start Frontend"
+author = 46633659
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm run dev"
