@@ -7,14 +7,7 @@ export interface Alert {
   event: string;
   source_ip: string;
   timestamp: string;
-  severity?: string;
-}
-
-interface SupabaseAlert {
-  id: number;
-  event: string;
-  source_ip: string;
-  timestamp: string;
+  severity: string;
 }
 
 export const useAlerts = () => {
@@ -22,36 +15,29 @@ export const useAlerts = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchAlerts = async () => {
-    try {
-      // First try to fetch from your FastAPI backend
-      const response = await fetch('/api/alerts');
-      if (response.ok) {
-        const backendAlerts = await response.json();
-        const transformedAlerts = backendAlerts.map((alert: any) => ({
-          id: alert.id?.toString() || Math.random().toString(),
-          event: alert.event || 'Unknown Event',
-          source_ip: alert.source_ip || 'Unknown IP',
-          timestamp: new Date(alert.timestamp).toLocaleString(),
-          severity: getSeverityFromEvent(alert.event || 'Unknown Event')
-        }));
-        setAlerts(transformedAlerts);
-        return;
-      }
-    } catch (error) {
-      console.error('Error fetching from backend:', error);
-    }
+  const getSeverityFromEvent = (event: string): string => {
+    const eventLower = event.toLowerCase();
+    if (eventLower.includes('ssh') || eventLower.includes('bruteforce')) return 'Critical';
+    if (eventLower.includes('ddos') || eventLower.includes('dos')) return 'Ddos';
+    if (eventLower.includes('scan') || eventLower.includes('exploit')) return 'High';
+    if (eventLower.includes('suspicious')) return 'Medium';
+    return 'Low';
+  };
 
+  const fetchAlerts = async () => {
+    setLoading(true);
     try {
-      // Fallback to Supabase direct query
+      console.log('Fetching alerts from Supabase...');
       const { data, error } = await supabase
-        .from('alerts')
+        .from('alerts') // ✅ No generics, avoids TS errors
         .select('*')
         .order('timestamp', { ascending: false });
 
       if (error) throw error;
 
-      const transformedAlerts = (data || []).map(alert => ({
+      console.log('Supabase alerts:', data);
+
+      const transformedAlerts: Alert[] = (data || []).map((alert: any) => ({
         id: alert.id.toString(),
         event: alert.event,
         source_ip: alert.source_ip,
@@ -72,37 +58,23 @@ export const useAlerts = () => {
     }
   };
 
-  const getSeverityFromEvent = (event: string): string => {
-    const eventLower = event.toLowerCase();
-    if (eventLower.includes('ssh') || eventLower.includes('bruteforce')) return 'Critical';
-    if (eventLower.includes('ddos') || eventLower.includes('dos')) return 'Ddos';
-    if (eventLower.includes('scan') || eventLower.includes('exploit')) return 'High';
-    if (eventLower.includes('suspicious')) return 'Medium';
-    return 'Low';
-  };
-
   useEffect(() => {
     fetchAlerts();
 
-    // Set up real-time subscription for new alerts
     const channel = supabase
       .channel('alerts-changes')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'alerts'
-        },
+        { event: 'INSERT', schema: 'public', table: 'alerts' },
         (payload) => {
-          const newAlert = {
+          const newAlert: Alert = {
             id: payload.new.id.toString(),
             event: payload.new.event,
             source_ip: payload.new.source_ip,
             timestamp: new Date(payload.new.timestamp).toLocaleString(),
             severity: getSeverityFromEvent(payload.new.event)
           };
-          setAlerts(prev => [newAlert, ...prev.slice(0, 99)]); // Keep last 100 alerts
+          setAlerts(prev => [newAlert, ...prev.slice(0, 99)]);
           toast({
             title: "New Alert",
             description: `${newAlert.event} from ${newAlert.source_ip}`,
@@ -111,12 +83,11 @@ export const useAlerts = () => {
       )
       .subscribe();
 
-    // Also set up periodic refresh to catch any missed alerts
-    const refreshInterval = setInterval(fetchAlerts, 30000); // Refresh every 30 seconds
+    const interval = setInterval(fetchAlerts, 30000);
 
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(refreshInterval);
+      clearInterval(interval);
     };
   }, []);
 
