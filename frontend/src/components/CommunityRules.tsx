@@ -7,20 +7,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Download, Share2, ArrowRight, FileText, Star } from "lucide-react";
-import { useRules } from "@/hooks/useRules";
+import { Upload, Download, Share2, ArrowRight, FileText } from "lucide-react";
+import { useRules, Rule } from "@/hooks/useRules";
 
 const CommunityRules = () => {
   const { rules, loading, uploadRule, downloadRule } = useRules();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [showAllRules, setShowAllRules] = useState(false);
   const [uploadForm, setUploadForm] = useState({
-    title: '',
-    description: '',
-    rule_content: '',
-    rule_type: '',
-    severity: '',
-    tags: ''
+    title: "",
+    description: "",
+    rule_content: "",
+    rule_type: "",
+    severity: "",
+    tags: ""
   });
 
   const handleUpload = async () => {
@@ -31,29 +31,20 @@ const CommunityRules = () => {
         rule_content: uploadForm.rule_content,
         rule_type: uploadForm.rule_type,
         severity: uploadForm.severity,
-        tags: uploadForm.tags ? uploadForm.tags.split(',').map(t => t.trim()) : []
+        tags: uploadForm.tags ? uploadForm.tags.split(",").map(t => t.trim()) : []
       });
-      setUploadForm({
-        title: '',
-        description: '',
-        rule_content: '',
-        rule_type: '',
-        severity: '',
-        tags: ''
-      });
+      setUploadForm({ title: "", description: "", rule_content: "", rule_type: "", severity: "", tags: "" });
       setIsUploadOpen(false);
     } catch (error) {
-      // Error handling is done in the hook
+      // handled in hook
     }
   };
 
-  const handleDownload = async (ruleId: string, title: string) => {
+  const handleDownload = async (ruleId: string) => {
     await downloadRule(ruleId);
-    // In a real app, this would trigger an actual file download
-    console.log(`Downloading rule: ${title}`);
   };
 
-  const displayedRules = showAllRules ? rules : rules.slice(0, 3);
+  const displayedRules: Rule[] = showAllRules ? rules : rules.slice(0, 3);
 
   return (
     <Card className="bg-card border-border">
@@ -67,8 +58,9 @@ const CommunityRules = () => {
         <p className="text-muted-foreground text-sm">
           Upload, download, and share detection rules with the community
         </p>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Upload Rules */}
           <div className="flex flex-col items-center space-y-2 p-4 rounded-lg bg-secondary/30 border border-border/50">
             <Upload className="h-8 w-8 text-primary" />
             <h3 className="font-medium text-foreground">Upload Rules</h3>
@@ -87,7 +79,7 @@ const CommunityRules = () => {
                     <Input
                       id="title"
                       value={uploadForm.title}
-                      onChange={(e) => setUploadForm(prev => ({...prev, title: e.target.value}))}
+                      onChange={(e) => setUploadForm(prev => ({ ...prev, title: e.target.value }))}
                       placeholder="SSH Brute Force Detection"
                     />
                   </div>
@@ -96,14 +88,14 @@ const CommunityRules = () => {
                     <Textarea
                       id="description"
                       value={uploadForm.description}
-                      onChange={(e) => setUploadForm(prev => ({...prev, description: e.target.value}))}
+                      onChange={(e) => setUploadForm(prev => ({ ...prev, description: e.target.value }))}
                       placeholder="Detects repeated failed SSH login attempts"
                       rows={3}
                     />
                   </div>
                   <div>
                     <Label htmlFor="rule_type">Rule Type</Label>
-                    <Select value={uploadForm.rule_type} onValueChange={(value) => setUploadForm(prev => ({...prev, rule_type: value}))}>
+                    <Select value={uploadForm.rule_type} onValueChange={(v) => setUploadForm(prev => ({ ...prev, rule_type: v }))}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select rule type" />
                       </SelectTrigger>
@@ -117,7 +109,7 @@ const CommunityRules = () => {
                   </div>
                   <div>
                     <Label htmlFor="severity">Severity</Label>
-                    <Select value={uploadForm.severity} onValueChange={(value) => setUploadForm(prev => ({...prev, severity: value}))}>
+                    <Select value={uploadForm.severity} onValueChange={(v) => setUploadForm(prev => ({ ...prev, severity: v }))}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select severity" />
                       </SelectTrigger>
@@ -134,7 +126,7 @@ const CommunityRules = () => {
                     <Textarea
                       id="rule_content"
                       value={uploadForm.rule_content}
-                      onChange={(e) => setUploadForm(prev => ({...prev, rule_content: e.target.value}))}
+                      onChange={(e) => setUploadForm(prev => ({ ...prev, rule_content: e.target.value }))}
                       placeholder="Paste your rule content here..."
                       rows={4}
                     />
@@ -144,18 +136,17 @@ const CommunityRules = () => {
                     <Input
                       id="tags"
                       value={uploadForm.tags}
-                      onChange={(e) => setUploadForm(prev => ({...prev, tags: e.target.value}))}
+                      onChange={(e) => setUploadForm(prev => ({ ...prev, tags: e.target.value }))}
                       placeholder="ssh, bruteforce, authentication"
                     />
                   </div>
-                  <Button onClick={handleUpload} className="w-full">
-                    Upload Rule
-                  </Button>
+                  <Button onClick={handleUpload} className="w-full">Upload Rule</Button>
                 </div>
               </DialogContent>
             </Dialog>
           </div>
-          
+
+          {/* Download Rules */}
           <div className="flex flex-col items-center space-y-2 p-4 rounded-lg bg-secondary/30 border border-border/50">
             <Download className="h-8 w-8 text-primary" />
             <h3 className="font-medium text-foreground">Download Rules</h3>
@@ -164,7 +155,8 @@ const CommunityRules = () => {
               {showAllRules ? 'Show Less' : 'Browse'}
             </Button>
           </div>
-          
+
+          {/* Share Detection */}
           <div className="flex flex-col items-center space-y-2 p-4 rounded-lg bg-secondary/30 border border-border/50">
             <Share2 className="h-8 w-8 text-primary" />
             <h3 className="font-medium text-foreground">Share Detection</h3>
@@ -173,6 +165,7 @@ const CommunityRules = () => {
           </div>
         </div>
 
+        {/* Rule List */}
         {(showAllRules || displayedRules.length > 0) && (
           <div className="space-y-3 pt-4 border-t border-border">
             <h4 className="font-medium text-foreground">Available Rules</h4>
@@ -188,12 +181,8 @@ const CommunityRules = () => {
                     <div>
                       <h5 className="text-sm font-medium text-foreground">{rule.title}</h5>
                       <div className="flex items-center space-x-2 mt-1">
-                        <Badge variant="outline" className="text-xs">
-                          {rule.rule_type}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {rule.severity}
-                        </Badge>
+                        <Badge variant="outline" className="text-xs">{rule.rule_type}</Badge>
+                        <Badge variant="outline" className="text-xs">{rule.severity}</Badge>
                         <span className="text-xs text-muted-foreground flex items-center">
                           <Download className="h-3 w-3 mr-1" />
                           {rule.downloads_count}
@@ -201,11 +190,7 @@ const CommunityRules = () => {
                       </div>
                     </div>
                   </div>
-                  <Button 
-                    size="sm" 
-                    variant="ghost"
-                    onClick={() => handleDownload(rule.id, rule.title)}
-                  >
+                  <Button size="sm" variant="ghost" onClick={() => handleDownload(rule.id)}>
                     <Download className="h-4 w-4" />
                   </Button>
                 </div>
@@ -213,13 +198,12 @@ const CommunityRules = () => {
             )}
           </div>
         )}
-        
+
         {!showAllRules && rules.length > 3 && (
           <div className="flex items-center justify-between pt-4 border-t border-border">
             <span className="text-sm text-muted-foreground">Browse community content</span>
             <Button variant="ghost" size="sm" onClick={() => setShowAllRules(true)}>
-              View All ({rules.length})
-              <ArrowRight className="h-4 w-4 ml-2" />
+              View All ({rules.length}) <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           </div>
         )}

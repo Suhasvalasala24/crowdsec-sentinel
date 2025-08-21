@@ -1,31 +1,33 @@
-import { useState, useMemo } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Filter, AlertTriangle, Shield, Zap, Scan, Calendar } from 'lucide-react';
-import { useAlerts } from '@/hooks/useAlerts';
+import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Filter, AlertTriangle, Shield, Zap, Scan, Calendar } from "lucide-react";
+import { useAlerts } from "@/hooks/useAlerts";
 
 const AlertFeed = () => {
-  const { alerts, loading, refetch } = useAlerts();
-  const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const { alerts, loading } = useAlerts();
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
 
+  // Map event types to icons
   const getIconForEvent = (event: string) => {
-    const e = (event || '').toLowerCase();
-    if (e.includes('ssh') || e.includes('bruteforce')) return Shield;
-    if (e.includes('scan') || e.includes('exploit')) return Scan;
-    if (e.includes('ddos') || e.includes('dos')) return Zap;
+    const eventLower = event.toLowerCase();
+    if (eventLower.includes('ssh') || eventLower.includes('bruteforce')) return Shield;
+    if (eventLower.includes('scan')) return Scan;
+    if (eventLower.includes('ddos') || eventLower.includes('dos')) return Zap;
     return AlertTriangle;
   };
 
+  // Map severity to color
   const getSeverityColor = (severity: string) => {
-    switch ((severity || 'low').toLowerCase()) {
-      case 'critical': return 'hsl(var(--critical))';
-      case 'high': return 'hsl(var(--high))';
-      case 'medium': return 'hsl(var(--medium))';
-      case 'low': return 'hsl(var(--low))';
-      case 'ddos': return 'hsl(280 100% 70%)';
+    switch (severity) {
+      case 'Critical': return 'hsl(var(--critical))';
+      case 'High': return 'hsl(var(--high))';
+      case 'Medium': return 'hsl(var(--medium))';
+      case 'Low': return 'hsl(var(--low))';
+      case 'Ddos': return 'hsl(280 100% 70%)';
       default: return 'hsl(var(--muted-foreground))';
     }
   };
@@ -38,8 +40,8 @@ const AlertFeed = () => {
         className="text-xs font-medium border-0 px-2 py-1 rounded-md"
         style={{
           backgroundColor: `${color}20`,
-          color,
-          border: `1px solid ${color}40`,
+          color: color,
+          border: `1px solid ${color}40`
         }}
       >
         {severity}
@@ -47,11 +49,10 @@ const AlertFeed = () => {
     );
   };
 
-  const filteredAlerts = useMemo(() => {
-    return (alerts || [])
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .filter(a => severityFilter === 'all' || a.severity.toLowerCase() === severityFilter.toLowerCase());
-  }, [alerts, severityFilter]);
+  // Filter & sort alerts
+  const filteredAlerts = alerts
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .filter(alert => severityFilter === "all" || alert.severity?.toLowerCase() === severityFilter.toLowerCase());
 
   if (loading) {
     return (
@@ -71,7 +72,7 @@ const AlertFeed = () => {
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-semibold text-foreground">Alert Feed</CardTitle>
-          <Button
+          <Button 
             variant="outline"
             size="sm"
             className="text-muted-foreground"
@@ -110,27 +111,29 @@ const AlertFeed = () => {
         ) : (
           filteredAlerts.map(alert => {
             const IconComponent = getIconForEvent(alert.event);
-            const severityColor = getSeverityColor(alert.severity);
+            const severityColor = getSeverityColor(alert.severity || 'Low');
 
             return (
-              <div
-                key={alert.id}
+              <div 
+                key={alert.id} 
                 className="flex items-start space-x-3 p-3 rounded-lg bg-secondary/30 border border-border/50 hover:bg-secondary/50 transition-colors"
               >
-                <div
+                <div 
                   className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: `${severityColor}20` }}
                 >
-                  <IconComponent style={{ color: severityColor }} className="w-4 h-4" />
+                  <span style={{ color: severityColor }} className="text-sm font-bold">
+                    {alert.severity}
+                  </span>
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <h4 className="text-sm font-medium text-foreground">{alert.event}</h4>
-                    {getSeverityBadge(alert.severity)}
+                    {getSeverityBadge(alert.severity || 'Low')}
                   </div>
                   <p className="text-sm text-muted-foreground">{alert.source_ip}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{new Date(alert.timestamp).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{alert.timestamp}</p>
                 </div>
               </div>
             );

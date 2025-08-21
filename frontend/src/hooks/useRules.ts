@@ -9,17 +9,7 @@ export interface Rule {
   rule_type: string;
   severity: string;
   downloads_count: number;
-  created_at: string;
-  user_id: string | null;
-}
-
-interface SupabaseRule {
-  id: string;
-  title: string;
-  description: string | null;
-  rule_type: string;
-  severity: string;
-  downloads_count: number;
+  tags: string[];
   created_at: string;
   user_id: string | null;
   is_public: boolean;
@@ -31,21 +21,22 @@ export const useRules = () => {
   const { toast } = useToast();
 
   const fetchRules = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('rules' as any)
+        .from('rules') // no <Rule> generic
         .select('*')
         .eq('is_public', true)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setRules((data as SupabaseRule[]) || []);
+      setRules((data as Rule[]) || []);
     } catch (error) {
       console.error('Error fetching rules:', error);
       toast({
-        title: "Error",
-        description: "Failed to fetch community rules",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to fetch community rules',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -62,29 +53,31 @@ export const useRules = () => {
   }) => {
     try {
       const { data, error } = await supabase
-        .from('rules' as any)
+        .from('rules')
         .insert([{
           ...ruleData,
-          user_id: null // For now, no auth
+          tags: ruleData.tags || [],
+          downloads_count: 0,
+          user_id: null,
+          is_public: true,
         }])
         .select()
         .single();
 
       if (error) throw error;
-      
-      setRules(prev => [data as SupabaseRule, ...prev]);
+
+      setRules(prev => [data as Rule, ...prev]);
       toast({
-        title: "Success",
-        description: "Rule uploaded successfully",
+        title: 'Success',
+        description: 'Rule uploaded successfully',
       });
-      
       return data;
     } catch (error) {
       console.error('Error uploading rule:', error);
       toast({
-        title: "Error",
-        description: "Failed to upload rule",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to upload rule',
+        variant: 'destructive',
       });
       throw error;
     }
@@ -92,25 +85,20 @@ export const useRules = () => {
 
   const downloadRule = async (ruleId: string) => {
     try {
-      const { error } = await supabase
-        .from('rule_downloads' as any)
-        .insert([{
-          rule_id: ruleId,
-          user_id: null // For now, no auth
-        }]);
+      await supabase
+        .from('rules_download')
+        .insert([{ rule_id: ruleId, user_id: null }]);
 
-      if (error) throw error;
-      
       toast({
-        title: "Success",
-        description: "Rule downloaded successfully",
+        title: 'Success',
+        description: 'Rule downloaded successfully',
       });
     } catch (error) {
-      console.error('Error downloading rule:', error);
+      console.error('Error recording download:', error);
       toast({
-        title: "Error",
-        description: "Failed to record download",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to record download',
+        variant: 'destructive',
       });
     }
   };
@@ -118,19 +106,15 @@ export const useRules = () => {
   useEffect(() => {
     fetchRules();
 
-    // Set up real-time subscription
     const channel = supabase
-      .channel('rules-changes')
+      .channel('rules-channel')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'rules'
-        },
-        (payload) => {
-          if (payload.new.is_public) {
-            setRules(prev => [payload.new as Rule, ...prev]);
+        { event: '*', schema: 'public', table: 'rules' },
+        (payload: any) => {
+          const newRule = payload.new as Rule;
+          if (newRule.is_public) {
+            setRules(prev => [newRule, ...prev]);
           }
         }
       )

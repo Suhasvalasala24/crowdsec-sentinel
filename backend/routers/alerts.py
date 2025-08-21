@@ -1,40 +1,69 @@
-from fastapi import APIRouter, HTTPException
-import os
-import requests
-import logging
+# routers/alerts.py
+from fastapi import APIRouter, Request, HTTPException
+from supabase import create_client
+import os, logging
+from dotenv import load_dotenv
+from datetime import datetime
+
+# Load .env
+load_dotenv()
 
 router = APIRouter()
 
-# Config
-LAPI_URL = "http://localhost:8080"
-CROWDSEC_LOGIN = os.getenv("CROWDSEC_LOGIN", "backend")
-CROWDSEC_PASSWORD = os.getenv("CROWDSEC_PASSWORD", "tUx6kDSVgYAKi5SyjJ193Jpiyj9BwMkAsQ4nJOjv1ideN6h9l1ecQfi1IEeQnRLN")
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Supabase config
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.error("❌ Missing Supabase configuration. Check your .env file.")
+    raise Exception("Supabase URL or Key not set")
 
-def get_lapi_session():
-    """Authenticate to CrowdSec LAPI and return a requests.Session with JWT cookie."""
-    session = requests.Session()
-    login_payload = {
-        "login": CROWDSEC_LOGIN,
-        "password": CROWDSEC_PASSWORD
-    }
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+@router.post("/alerts")
+async def receive_alerts(request: Request):
+    """Receive alerts from CrowdSec notifier and insert safely into Supabase"""
     try:
-        resp = session.post(f"{LAPI_URL}/v1/login", json=login_payload)
-        resp.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        logging.error(f"LAPI login failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to login to CrowdSec LAPI")
-    return session
+        data = await request.json()
+        if not isinstance(data, list):
+            data = [data]
 
+        inserted = 0
+        for alert in data:
+            alert_uuid = alert.get("uuid")
+            scenario = alert.get("scenario", "unknown")
+            source_ip = alert.get("source", {}).get("ip", "unknown")
+            severity = "info"
+            timestamp = alert.get("created_at")
 
-@router.get("/alerts")
-def get_alerts():
-    """Fetch alerts from CrowdSec LAPI."""
-    session = get_lapi_session()
-    try:
-        resp = session.get(f"{LAPI_URL}/v1/alerts")
-        resp.raise_for_status()
-        return resp.json()
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Error fetching alerts: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch alerts")
+            # Fill timestamp if missing
+            if not timestamp:
+                timestamp = datetime.utcnow().isoformat() + "Z"
+
+            # Check if alert already exists
+            existing = supabase.table("alerts").select("*").eq("id", alert_uuid).execute()
+            if existing.data:
+                logger.info(f"⚠️ Alert {alert_uuid} already exists. Skipping insert.")
+                continue
+
+            row = {
+                "id": alert_uuid,
+                "source_ip": source_ip,
+                "event": scenario,
+                "severity": severity,
+                "timestamp": timestamp,
+            }
+
+            # Insert into Supabase
+            supabase.table("alerts").insert(row).execute()
+            inserted += 1
+            logger.info(f"✅ Inserted alert: {row}")
+
+        return {"status": "success", "inserted": inserted}
+
+    except Exception as e:
+        logger.error(f"❌ Error saving alert: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error processing alert")
