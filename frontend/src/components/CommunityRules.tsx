@@ -8,18 +8,26 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, Download, Share2, ArrowRight, FileText } from "lucide-react";
-import { useRules, Rule } from "@/hooks/useRules";
+import { useRules, Rule, RuleType, Severity } from "@/hooks/useRules";
 
 const CommunityRules = () => {
   const { rules, loading, uploadRule, downloadRule } = useRules();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [showAllRules, setShowAllRules] = useState(false);
-  const [uploadForm, setUploadForm] = useState({
+
+  const [uploadForm, setUploadForm] = useState<{
+    title: string;
+    description: string;
+    rule_content: string;
+    rule_type: RuleType;
+    severity: Severity;
+    tags: string;
+  }>({
     title: "",
     description: "",
     rule_content: "",
-    rule_type: "",
-    severity: "",
+    rule_type: "detection",
+    severity: "Low",
     tags: ""
   });
 
@@ -33,15 +41,15 @@ const CommunityRules = () => {
         severity: uploadForm.severity,
         tags: uploadForm.tags ? uploadForm.tags.split(",").map(t => t.trim()) : []
       });
-      setUploadForm({ title: "", description: "", rule_content: "", rule_type: "", severity: "", tags: "" });
+      setUploadForm({ title: "", description: "", rule_content: "", rule_type: "detection", severity: "Low", tags: "" });
       setIsUploadOpen(false);
     } catch (error) {
-      // handled in hook
+      console.error(error);
     }
   };
 
-  const handleDownload = async (ruleId: string) => {
-    await downloadRule(ruleId);
+  const handleDownload = (ruleId: string) => {
+    downloadRule(ruleId);
   };
 
   const displayedRules: Rule[] = showAllRules ? rules : rules.slice(0, 3);
@@ -95,21 +103,26 @@ const CommunityRules = () => {
                   </div>
                   <div>
                     <Label htmlFor="rule_type">Rule Type</Label>
-                    <Select value={uploadForm.rule_type} onValueChange={(v) => setUploadForm(prev => ({ ...prev, rule_type: v }))}>
+                    <Select
+                      value={uploadForm.rule_type}
+                      onValueChange={(v: RuleType) => setUploadForm(prev => ({ ...prev, rule_type: v }))}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select rule type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="crowdsec">CrowdSec</SelectItem>
-                        <SelectItem value="suricata">Suricata</SelectItem>
-                        <SelectItem value="snort">Snort</SelectItem>
-                        <SelectItem value="custom">Custom</SelectItem>
+                        <SelectItem value="detection">Detection</SelectItem>
+                        <SelectItem value="prevention">Prevention</SelectItem>
+                        <SelectItem value="response">Response</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
                     <Label htmlFor="severity">Severity</Label>
-                    <Select value={uploadForm.severity} onValueChange={(v) => setUploadForm(prev => ({ ...prev, severity: v }))}>
+                    <Select
+                      value={uploadForm.severity}
+                      onValueChange={(v: Severity) => setUploadForm(prev => ({ ...prev, severity: v }))}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select severity" />
                       </SelectTrigger>

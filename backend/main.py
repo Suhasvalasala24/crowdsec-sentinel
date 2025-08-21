@@ -1,120 +1,132 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
-import os
-import logging
-import requests
+from supabase import create_client, Client
 from dotenv import load_dotenv
-from supabase import create_client
-from routers import alerts  # import the alerts router
+import os
 
-# Load environment variables
+# Load env
 load_dotenv()
 
-# Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-app = FastAPI()
+app = FastAPI(title="CrowdSec Sentinel Backend")
 
-# CORS
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:8081",
-    "http://127.0.0.1:8081",
-    "*"  # allow all for dev
-]
-
+# Allow frontend origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# CrowdSec LAPI config
-CROWDSEC_API_URL = os.getenv("CROWDSEC_API_URL", "http://localhost:8080")
-CROWDSEC_LOGIN = os.getenv("CROWDSEC_LOGIN")
-CROWDSEC_PASSWORD = os.getenv("CROWDSEC_PASSWORD")
+# ------------------------
+# RULES ENDPOINTS
+# ------------------------
 
-# Supabase config
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    logger.error("❌ Missing Supabase configuration. Check your .env file.")
-    raise Exception("Supabase URL or Key not set")
-
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Include alerts router
-app.include_router(alerts.router)
-
-
-@app.get("/")
-def root():
-    return {"message": "✅ Backend running with FastAPI + Supabase + CrowdSec!"}
-
-
-@app.get("/alerts/crowdsec")
-def get_alerts_from_crowdsec():
-    """Fetch alerts from CrowdSec LAPI and insert into Supabase"""
+@app.post("/rules/upload")
+async def upload_rule(
+    title: str = Form(...),
+    description: str = Form(""),
+    rule_content: str = Form(...),
+    rule_type: str = Form(...),
+    severity: str = Form(...),
+    user_id: str = Form(...),
+):
+    """Upload a new rule into Supabase"""
     try:
-        # Login to CrowdSec LAPI
-        login_resp = requests.post(
-            f"{CROWDSEC_API_URL}/v1/watchers/login",
-            json={"machine_id": CROWDSEC_LOGIN, "password": CROWDSEC_PASSWORD},
-            timeout=5,
-        )
-        login_resp.raise_for_status()
-        token = login_resp.json().get("token")
-        if not token:
-            raise Exception("No token received from CrowdSec API")
-
-        headers = {"Authorization": f"Bearer {token}"}
-        resp = requests.get(f"{CROWDSEC_API_URL}/v1/alerts", headers=headers, timeout=5)
-        resp.raise_for_status()
-        alerts_data = resp.json()
-
-        inserted = 0
-        for alert in alerts_data:
-            events = alert.get("events", [])
-            for event in events:
-                meta_list = event.get("meta", [])
-                if isinstance(meta_list, list):
-                    for meta in meta_list:
-                        if not isinstance(meta, dict):
-                            continue
-                        row = {
-                            "source_ip": meta.get("source_ip", alert.get("source", {}).get("ip", "unknown")),
-                            "target_user": meta.get("target_user"),
-                            "event": alert.get("scenario", "unknown"),
-                            "severity": meta.get("severity", "info"),
-                            "timestamp": meta.get("timestamp"),
-                            "message": alert.get("message"),
-                        }
-                        supabase.table("alerts").insert(row).execute()
-                        inserted += 1
-
-        return {"fetched": len(alerts_data), "inserted": inserted}
-
+        response = supabase.table("rules").insert({
+            "user_id": user_id,
+            "title": title,
+            "description": description,
+            "rule_content": rule_content,
+            "rule_type": rule_type,
+            "severity": severity,
+        }).execute()
+        return {"status": "success", "data": response.data}
     except Exception as e:
-        logger.error(f"❌ Error fetching alerts: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch alerts")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/alerts")
-def get_alerts_from_supabase():
-    """Fetch stored alerts from Supabase"""
+@app.get("/rules/list")
+async def list_rules():
+    """Fetch all public rules"""
     try:
-        response = supabase.table("alerts").select("*").order("timestamp", desc=True).execute()
-        return response.data
+        response = supabase.table("rules").select("*").eq("is_public", True).execute()
+        return {"status": "success", "data": response.data}
     except Exception as e:
-        logger.error(f"❌ Error fetching from Supabase: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch from Supabase")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000, reload=True)
+@app.post("/rules/download/{rule_id}")
+async def download_rule(rule_id: str, user_id: str = Form(...)):
+    """Download a rule -> increments count & records user download"""
+    try:
+        # Update downloads count
+        supabase.rpc("increment_rule_downloads", {"ruleid": rule_id}).execute()
+
+        # Insert into downloads table
+        supabase.table("rule_downloads").insert({
+            "rule_id": rule_id,
+            "user_id": user_id
+        }).execute()
+
+        # Fetch rule content
+        response = supabase.table("rules").select("*").eq("id", rule_id).single().execute()
+        return {"status": "success", "data": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------
+# SHARED DETECTIONS
+# ------------------------
+
+@app.post("/detections/upload")
+async def upload_detection(
+    user_id: str = Form(...),
+    detection_type: str = Form(...),
+    threat_data: str = Form(...),  # should be JSON string
+    ip_address: str = Form(None),
+    location: str = Form(None),
+    confidence_score: float = Form(0.5),
+):
+    """Upload a shared detection"""
+    try:
+        response = supabase.table("shared_detections").insert({
+            "user_id": user_id,
+            "detection_type": detection_type,
+            "threat_data": threat_data,
+            "ip_address": ip_address,
+            "location": location,
+            "confidence_score": confidence_score
+        }).execute()
+        return {"status": "success", "data": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/detections/list")
+async def list_detections():
+    """Fetch all shared detections"""
+    try:
+        response = supabase.table("shared_detections").select("*").execute()
+        return {"status": "success", "data": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------
+# ALERTS
+# ------------------------
+
+@app.get("/alerts/list")
+async def list_alerts():
+    """Fetch alerts stored in Supabase"""
+    try:
+        response = supabase.table("alerts").select("*").order("timestamp", desc=True).limit(50).execute()
+        return {"status": "success", "data": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

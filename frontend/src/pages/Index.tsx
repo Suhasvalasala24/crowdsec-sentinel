@@ -2,6 +2,7 @@ import { Shield, User } from "lucide-react";
 import AlertFeed from "@/components/AlertFeed";
 import SimpleThreatMap from "@/components/SimpleThreatMap";
 import CommunityRules from "@/components/CommunityRules";
+
 import ThreatMapLeaflet from "@/components/ThreatMapLeaflet";
 
 const Index = () => {
@@ -25,7 +26,7 @@ const Index = () => {
       {/* Main Content */}
       <div className="container mx-auto px-6 py-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-foreground mb-2">CROWDSEC SENTINEL</h2>
+          <h2 className="text-3xl font-bold text-foreground mb-2">Our Sentinel</h2>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

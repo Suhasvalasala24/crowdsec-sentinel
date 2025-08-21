@@ -68,11 +68,12 @@ const ThreatMapLeaflet = () => {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-96 rounded-lg overflow-hidden border border-border">
+        {/* Wrapper ensures map doesn’t overlay */}
+        <div className="relative h-96 rounded-lg overflow-hidden border border-border z-0">
           <MapContainer
             center={mapCenter}
             zoom={2}
-            style={{ height: '100%', width: '100%' }}
+            className="h-full w-full z-0"
             zoomControl
             scrollWheelZoom
           >
