@@ -43,6 +43,13 @@ def get_lapi_session():
         raise HTTPException(status_code=500, detail="Failed to login to CrowdSec LAPI")
 
 
+def parse_meta(meta_list):
+    """Convert CrowdSec meta list into a dict {key: value}"""
+    if isinstance(meta_list, list):
+        return {m.get("key"): m.get("value") for m in meta_list if isinstance(m, dict)}
+    return {}
+
+
 @router.get("/alerts")
 def get_alerts():
     """Fetch alerts from Supabase."""
@@ -56,42 +63,55 @@ def get_alerts():
 
 @router.post("/alerts")
 async def receive_alerts(request: Request):
-    """Receive alerts and insert safely into Supabase."""
+    """Receive alerts from CrowdSec notifier and insert safely into Supabase."""
     try:
-        data = await request.json()
-        if not isinstance(data, list):
-            data = [data]
+        payload = await request.json()
+
+        # Handle both dict and list payloads
+        alerts = payload if isinstance(payload, list) else [payload]
+
+        logger.info(f"📥 Received {len(alerts)} alerts from CrowdSec")
 
         inserted = 0
-        for alert in data:
-            alert_uuid = alert.get("uuid") or str(uuid.uuid4())
-            scenario = alert.get("scenario") or alert.get("event") or "unknown"
-            source_ip = (
-                (alert.get("source") or {}).get("ip")
-                or (alert.get("meta") or {}).get("source_ip")
-                or "unknown"
-            )
-            severity = (alert.get("meta") or {}).get("severity", "info")
-            timestamp = alert.get("created_at") or datetime.utcnow().isoformat() + "Z"
+        for alert in alerts:
+            try:
+                alert_uuid = alert.get("uuid") or str(uuid.uuid4())
+                scenario = alert.get("scenario") or alert.get("event") or "unknown"
 
-            # Check for duplicate
-            existing = supabase.table("alerts").select("*").eq("id", alert_uuid).execute()
-            if existing.data:
-                continue
+                # parse meta list
+                meta_dict = parse_meta(alert.get("meta"))
 
-            row = {
-                "id": alert_uuid,
-                "source_ip": source_ip,
-                "event": scenario,
-                "severity": severity,
-                "timestamp": timestamp,
-            }
-            supabase.table("alerts").insert(row).execute()
-            inserted += 1
-            logger.info(f"✅ Inserted alert: {row}")
+                source_ip = (
+                    (alert.get("source") or {}).get("ip")
+                    or meta_dict.get("source_ip")
+                    or "unknown"
+                )
+                severity = meta_dict.get("severity", "info")
+                timestamp = alert.get("created_at") or datetime.utcnow().isoformat() + "Z"
 
-        return {"status": "success", "inserted": inserted}
+                # Skip duplicates
+                existing = supabase.table("alerts").select("id").eq("id", alert_uuid).execute()
+                if existing.data:
+                    logger.debug(f"⚠️ Skipping duplicate alert: {alert_uuid}")
+                    continue
+
+                row = {
+                    "id": alert_uuid,
+                    "source_ip": source_ip,
+                    "event": scenario,
+                    "severity": severity,
+                    "timestamp": timestamp,
+                }
+
+                supabase.table("alerts").insert(row).execute()
+                inserted += 1
+                logger.info(f"✅ Inserted alert into Supabase: {row}")
+
+            except Exception as inner_e:
+                logger.error(f"⚠️ Skipped alert due to error: {inner_e} | Raw alert: {alert}")
+
+        return {"status": "success", "inserted": inserted, "total_received": len(alerts)}
 
     except Exception as e:
-        logger.error(f"❌ Error saving alerts: {e}", exc_info=True)
+        logger.error(f"❌ Error processing alerts: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Error processing alerts")
