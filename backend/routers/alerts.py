@@ -1,9 +1,10 @@
-# routers/alerts.py
 from fastapi import APIRouter, Request, HTTPException
 from supabase import create_client
 import os, logging
 from dotenv import load_dotenv
 from datetime import datetime
+import uuid
+import requests
 
 # Load .env
 load_dotenv()
@@ -18,14 +19,44 @@ logger = logging.getLogger(__name__)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 if not SUPABASE_URL or not SUPABASE_KEY:
-    logger.error("❌ Missing Supabase configuration. Check your .env file.")
+    logger.error("❌ Missing Supabase configuration in .env")
     raise Exception("Supabase URL or Key not set")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# CrowdSec config
+CROWDSEC_API_URL = os.getenv("CROWDSEC_API_URL", "http://127.0.0.1:8080")
+CROWDSEC_LOGIN = os.getenv("CROWDSEC_LOGIN")
+CROWDSEC_PASSWORD = os.getenv("CROWDSEC_PASSWORD")
+
+
+def get_lapi_session():
+    """Authenticate to CrowdSec LAPI and return session with JWT cookie."""
+    session = requests.Session()
+    payload = {"login": CROWDSEC_LOGIN, "password": CROWDSEC_PASSWORD}
+    try:
+        resp = session.post(f"{CROWDSEC_API_URL}/v1/login", json=payload)
+        resp.raise_for_status()
+        return session
+    except requests.exceptions.RequestException as e:
+        logger.error(f"LAPI login failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to login to CrowdSec LAPI")
+
+
+@router.get("/alerts")
+def get_alerts():
+    """Fetch alerts from Supabase."""
+    try:
+        res = supabase.table("alerts").select("*").execute()
+        return res.data
+    except Exception as e:
+        logger.error(f"Error fetching alerts: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch alerts")
+
+
 @router.post("/alerts")
 async def receive_alerts(request: Request):
-    """Receive alerts from CrowdSec notifier and insert safely into Supabase"""
+    """Receive alerts and insert safely into Supabase."""
     try:
         data = await request.json()
         if not isinstance(data, list):
@@ -33,20 +64,19 @@ async def receive_alerts(request: Request):
 
         inserted = 0
         for alert in data:
-            alert_uuid = alert.get("uuid")
-            scenario = alert.get("scenario", "unknown")
-            source_ip = alert.get("source", {}).get("ip", "unknown")
-            severity = "info"
-            timestamp = alert.get("created_at")
+            alert_uuid = alert.get("uuid") or str(uuid.uuid4())
+            scenario = alert.get("scenario") or alert.get("event") or "unknown"
+            source_ip = (
+                (alert.get("source") or {}).get("ip")
+                or (alert.get("meta") or {}).get("source_ip")
+                or "unknown"
+            )
+            severity = (alert.get("meta") or {}).get("severity", "info")
+            timestamp = alert.get("created_at") or datetime.utcnow().isoformat() + "Z"
 
-            # Fill timestamp if missing
-            if not timestamp:
-                timestamp = datetime.utcnow().isoformat() + "Z"
-
-            # Check if alert already exists
+            # Check for duplicate
             existing = supabase.table("alerts").select("*").eq("id", alert_uuid).execute()
             if existing.data:
-                logger.info(f"⚠️ Alert {alert_uuid} already exists. Skipping insert.")
                 continue
 
             row = {
@@ -56,8 +86,6 @@ async def receive_alerts(request: Request):
                 "severity": severity,
                 "timestamp": timestamp,
             }
-
-            # Insert into Supabase
             supabase.table("alerts").insert(row).execute()
             inserted += 1
             logger.info(f"✅ Inserted alert: {row}")
@@ -65,5 +93,5 @@ async def receive_alerts(request: Request):
         return {"status": "success", "inserted": inserted}
 
     except Exception as e:
-        logger.error(f"❌ Error saving alert: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Error processing alert")
+        logger.error(f"❌ Error saving alerts: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error processing alerts")
